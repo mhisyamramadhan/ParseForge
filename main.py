@@ -163,7 +163,7 @@ async def process_file(
     except pytz.UnknownTimeZoneError:
         tz = pytz.timezone("UTC")
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(tz).strftime("%Y%m%d_%H%M%S")
     output_filename = f"{code}_{timestamp}.csv"
 
     return StreamingResponse(
