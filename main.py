@@ -2,9 +2,14 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import io
+import uvicorn
+import os
 import importlib
 import pandas as pd
 import csv
+import pytz
+from datetime import datetime
+from fastapi import Request
 from datetime import datetime
 
 app = FastAPI()
@@ -22,7 +27,8 @@ app.add_middleware(
 @app.post("/process")
 async def process_file(
     code: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    timezone: str = Form("Asia/Jakarta")
 ):
     # Validasi ekstensi
     if not file.filename.endswith('.csv'):
@@ -128,11 +134,11 @@ async def process_file(
 
     # Cek apakah kolom yang diperlukan ada di dalam file
     if code not in required_columns:
-        raise HTTPException(status_code=400, detail=f"Processor '{code}' tidak dikenali.")
+        raise HTTPException(status_code=400, detail=f"Processor '{code}' is not recognized.")
     
     missing_columns = [col for col in required_columns[code] if col not in df.columns]
     if missing_columns:
-        raise HTTPException(status_code=400, detail=f"File tidak memiliki kolom yang diperlukan: {', '.join(missing_columns)}")
+        raise HTTPException(status_code=400, detail=f"The file is missing the required columns: {', '.join(missing_columns)}")
 
     
     # Dinamis load processor dari folder 'processors'
@@ -140,11 +146,11 @@ async def process_file(
         processor = importlib.import_module(f"processors.{code}")
         processed_df = processor.process(df)
     except ModuleNotFoundError:
-        raise HTTPException(status_code=400, detail=f"Processor '{code}' tidak ditemukan.")
+        raise HTTPException(status_code=400, detail=f"Processor '{code}' is missing.")
     except AttributeError:
-        raise HTTPException(status_code=500, detail=f"Processor '{code}' tidak memiliki fungsi 'process'.")
+        raise HTTPException(status_code=500, detail=f"Processor '{code}' does not have a 'process' function.")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Kesalahan saat memproses: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error during processing: {str(e)}")
     
     # Konversi hasil kembali ke CSV
     buffer = io.StringIO()
@@ -152,6 +158,11 @@ async def process_file(
     buffer.seek(0)
 
     # Format nama file hasil
+    try:
+        tz = pytz.timezone(timezone)
+    except pytz.UnknownTimeZoneError:
+        tz = pytz.timezone("UTC")
+
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_filename = f"{code}_{timestamp}.csv"
 
@@ -162,7 +173,5 @@ async def process_file(
     )
 
 if __name__ == "__main__":
-    import uvicorn
-    import os
     port = int(os.environ.get("PORT", 8000))  # railway kasih PORT lewat env
     uvicorn.run("main:app", host="0.0.0.0", port=port)
